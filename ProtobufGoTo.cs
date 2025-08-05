@@ -100,11 +100,11 @@ namespace ProtobufGoTo
             if (string.IsNullOrWhiteSpace(typeName))
                 return;
 
-            // Search for 'message XXX' in the document
+            // Search for 'message XXX' or 'enum XXX' in the document
             var textDoc = doc.Object("TextDocument") as TextDocument;
             EditPoint startPoint = textDoc.StartPoint.CreateEditPoint();
             string allText = startPoint.GetText(textDoc.EndPoint);
-            var regex = new Regex(@"^\s*message\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
+            var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
             var match = regex.Match(allText);
             if (match.Success)
             {
