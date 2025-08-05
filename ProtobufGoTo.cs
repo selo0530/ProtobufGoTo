@@ -117,9 +117,15 @@ namespace ProtobufGoTo
                         line++;
                     }
                 }
-                // Always move to the first column of the matched line
+                // Find the column offset of the typename in the matched line by analyzing the line text
                 EditPoint defPoint = textDoc.StartPoint.CreateEditPoint();
                 defPoint.MoveToLineAndOffset(line + 1, 1);
+                string lineText = defPoint.GetLines(line + 1, line + 2);
+                int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
+                if (columnOffset >= 0)
+                {
+                    defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                }
                 selection.MoveToPoint(defPoint, false);
                 doc.Activate();
             }
