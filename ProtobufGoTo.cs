@@ -128,6 +128,49 @@ namespace ProtobufGoTo
                 }
                 selection.MoveToPoint(defPoint, false);
                 doc.Activate();
+                return;
+            }
+
+            // If not found, search imported proto files
+            var importRegex = new Regex(@"^\s*import\s+""([^""]+)"";", RegexOptions.Multiline);
+            var importMatches = importRegex.Matches(allText);
+            string currentDir = Path.GetDirectoryName(doc.FullName);
+            foreach (Match importMatch in importMatches)
+            {
+                string importPath = importMatch.Groups[1].Value;
+                string fullImportPath = Path.Combine(currentDir, importPath);
+                if (!File.Exists(fullImportPath))
+                    continue;
+                string importText = File.ReadAllText(fullImportPath);
+                var importTypeMatch = regex.Match(importText);
+                if (importTypeMatch.Success)
+                {
+                    // Open the imported file in the editor
+                    Window importWin = dte.ItemOperations.OpenFile(fullImportPath);
+                    var importDoc = importWin.Document;
+                    var importTextDoc = importDoc.Object("TextDocument") as TextDocument;
+                    int charIndex = importTypeMatch.Index;
+                    int line = 1;
+                    for (int i = 0; i < charIndex; i++)
+                    {
+                        if (importText[i] == '\n')
+                        {
+                            line++;
+                        }
+                    }
+                    EditPoint defPoint = importTextDoc.StartPoint.CreateEditPoint();
+                    defPoint.MoveToLineAndOffset(line + 1, 1);
+                    string lineText = defPoint.GetLines(line + 1, line + 2);
+                    int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
+                    if (columnOffset >= 0)
+                    {
+                        defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                    }
+                    var importSelection = importDoc.Selection as TextSelection;
+                    importSelection.MoveToPoint(defPoint, false);
+                    importDoc.Activate();
+                    return;
+                }
             }
 		}
 	}
