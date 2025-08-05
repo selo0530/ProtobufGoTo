@@ -68,6 +68,10 @@
     </Bitmaps>
   </Commands>
 
+  <KeyBindings>
+    <KeyBinding guid="guidProtobufGoToPackageCmdSet" id="ProtobufGoToId" editor="guidVSStd97" key1="VK_F12" mod1=""/>
+  </KeyBindings>
+
   <Symbols>
     <!-- This is the package guid. -->
     <GuidSymbol name="guidProtobufGoToPackage" value="{3ca337c6-3f46-473d-8bc8-c22a921b0215}" />
