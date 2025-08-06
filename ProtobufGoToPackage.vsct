@@ -69,7 +69,7 @@
   </Commands>
 
   <KeyBindings>
-    <KeyBinding guid="guidProtobufGoToPackageCmdSet" id="ProtobufGoToId" editor="guidVSStd97" key1="VK_F12" mod1=""/>
+    <KeyBinding guid="guidProtobufGoToPackageCmdSet" id="ProtobufGoToId" editor="guidVSStd97" key1="VK_F12" mod1="Shift"/>
   </KeyBindings>
 
   <Symbols>
