@@ -15,7 +15,9 @@ namespace ProtobufGoTo
 	[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 	[InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
 	[ProvideMenuResource("Menus.ctmenu", 1)]
-	[Guid(ProtobufGoToPackage.PackageGuidString)]
+    [Guid(ProtobufGoToPackage.PackageGuidString)]
+    [ProvideLanguageService(typeof(MyProtoLanguageService), "Protobuf", 106)]
+    [ProvideLanguageExtension(typeof(MyProtoLanguageService), ".proto")]
     [ProvideAutoLoad(Microsoft.VisualStudio.Shell.Interop.UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
     [ProvideAutoLoad(Microsoft.VisualStudio.Shell.Interop.UIContextGuids80.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
@@ -23,7 +25,7 @@ namespace ProtobufGoTo
 	{
         public const string PackageGuidString = "3ca337c6-3f46-473d-8bc8-c22a921b0215";
 
-		public DTE2 m_dte;
+        public DTE2 m_dte;
 
 		public ProtobufGoToPackage()
 		{

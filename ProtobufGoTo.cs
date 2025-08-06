@@ -72,10 +72,9 @@ namespace ProtobufGoTo
             var dte = ProtoPackage.m_dte;
             if (dte == null)
             {
-                // DTE가 아직 준비되지 않았으면 즉시 GetService로 시도
                 dte = ServiceProvider.GetService(typeof(DTE)) as DTE2;
                 if (dte == null)
-                    return; // 또는 사용자에게 안내
+                    return;
                 ProtoPackage.m_dte = dte;
             }
             var doc = dte.ActiveDocument;
