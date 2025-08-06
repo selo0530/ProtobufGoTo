@@ -173,6 +173,72 @@ namespace ProtobufGoTo
                         return;
                     }
                 }
+
+                // If not found, search proto files from the solution
+                var solution = dte.Solution;
+                var protoFiles = new System.Collections.Generic.List<string>();
+                void FindProtoFiles(ProjectItems items)
+                {
+                    foreach (ProjectItem item in items)
+                    {
+                        try
+                        {
+                            if ((item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || item.Kind == EnvDTE.Constants.vsProjectItemKindMisc) &&
+                                item.Name.EndsWith(".proto", StringComparison.OrdinalIgnoreCase))
+                            {
+                                string filePath = item.FileNames[1];
+                                protoFiles.Add(filePath);
+                            }
+                            if (item.ProjectItems != null && item.ProjectItems.Count > 0)
+                                FindProtoFiles(item.ProjectItems);
+                        }
+                        catch { }
+                    }
+                }
+                foreach (Project proj in solution.Projects)
+                {
+                    try
+                    {
+                        if (proj.ProjectItems != null)
+                            FindProtoFiles(proj.ProjectItems);
+                    }
+                    catch { }
+                }
+
+                // 각 .proto 파일에서 message/enum 정의 찾기
+                var regex2 = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
+                foreach (var protoPath in protoFiles)
+                {
+                    if (!File.Exists(protoPath))
+                        continue;
+                    string allText2 = File.ReadAllText(protoPath);
+                    var match2 = regex2.Match(allText2);
+                    if (match2.Success)
+                    {
+                        int charIndex2 = match2.Index;
+                        int line2 = 1;
+                        for (int i = 0; i < charIndex2; i++)
+                        {
+                            if (allText2[i] == '\n')
+                                line2++;
+                        }
+                        Window protoWin2 = dte.ItemOperations.OpenFile(protoPath);
+                        var protoDoc2 = protoWin2.Document;
+                        var protoTextDoc2 = protoDoc2.Object("TextDocument") as TextDocument;
+                        EditPoint defPoint2 = protoTextDoc2.StartPoint.CreateEditPoint();
+                        defPoint2.MoveToLineAndOffset(line2 + 1, 1);
+                        string lineText2 = defPoint2.GetLines(line2 + 1, line2 + 2);
+                        int columnOffset2 = lineText2.IndexOf(typeName, StringComparison.Ordinal);
+                        if (columnOffset2 >= 0)
+                        {
+                            defPoint2.MoveToLineAndOffset(line2 + 1, columnOffset2 + 1);
+                        }
+                        var protoSelection2 = protoDoc2.Selection as TextSelection;
+                        protoSelection2.MoveToPoint(defPoint2, false);
+                        protoDoc2.Activate();
+                        return;
+                    }
+                }
             }
             else if (doc.Name.EndsWith(".h", StringComparison.OrdinalIgnoreCase) ||
                 doc.Name.EndsWith(".cpp", StringComparison.OrdinalIgnoreCase))
@@ -190,6 +256,12 @@ namespace ProtobufGoTo
                 string typeName = word.Trim();
                 if (string.IsNullOrWhiteSpace(typeName))
                     return;
+
+                if (typeName.StartsWith("PacketTypeReq_", StringComparison.OrdinalIgnoreCase) ||
+                    typeName.StartsWith("PacketTypeRes_", StringComparison.OrdinalIgnoreCase))
+                {
+                    typeName = typeName.Replace("PacketTypeReq_", "").Replace("PacketTypeRes_", "");
+                }
 
                 // 솔루션 내 모든 .proto 파일 탐색
                 var solution = dte.Solution;
