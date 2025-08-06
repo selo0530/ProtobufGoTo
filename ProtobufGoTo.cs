@@ -18,7 +18,6 @@ namespace ProtobufGoTo
 	internal sealed class ProtobufGoTo
 	{
 		public const int CommandId = 0x0100;
-        public const int ContextMenuCommandId = 0x0101;
 
         public static readonly Guid CommandSet = new Guid("7c132991-dea1-4719-8c67-c20b24b6775c");
 
@@ -39,10 +38,6 @@ namespace ProtobufGoTo
 				var menuCommandID = new CommandID(CommandSet, CommandId);
 				var menuItem = new MenuCommand(this.MenuItemCallback, menuCommandID);
 				commandService.AddCommand(menuItem);
-
-                menuCommandID = new CommandID(CommandSet, ContextMenuCommandId);
-                menuItem = new MenuCommand(this.MenuItemCallback, menuCommandID);
-                commandService.AddCommand(menuItem);
             }
 		}
 

@@ -56,7 +56,7 @@
         </Strings>
       </Button>
 
-	  <Button guid="guidProtobufGoToPackageCmdSet" id="ContextMenuProtobufGoToId" priority="0x0100" type="Button">
+	  <Button guid="guidProtobufGoToPackageCmdSet" id="ProtobufGoToId" priority="0x0100" type="Button">
 	  	<Parent guid="guidProtobufGoToPackageCmdSet" id="ContextMenuGroup" />
 	  	<Icon guid="guidImages" id="bmpPic1" />
 	  	<Strings>
@@ -89,7 +89,6 @@
       <IDSymbol name="MyMenuGroup" value="0x1020" />
 	  <IDSymbol name="ContextMenuGroup" value="0x1021" />
 	  <IDSymbol name="ProtobufGoToId" value="0x0100" />
-	  <IDSymbol name="ContextMenuProtobufGoToId" value="0x0101" />
     </GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{8bcbf9f0-c7c3-4a1e-89a0-fe5addf1b971}">
