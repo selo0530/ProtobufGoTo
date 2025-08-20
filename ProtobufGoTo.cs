@@ -55,28 +55,18 @@ namespace ProtobufGoTo
 			}
 		}
 
+		private System.Diagnostics.Process FBProcess
+		{
+			get;
+			set;
+		}
+
 		public static void Initialize(Package package)
 		{
 			Instance = new ProtobufGoTo(package);
 		}
 
-        private void GoToLocation(DTE2 dte, string path, int charIndex)
-        {
-            Window win = dte.ItemOperations.OpenFile(path);
-            var doc = win.Document;
-            if (doc == null) return;
-            var textDoc = doc.Object("TextDocument") as TextDocument;
-            if (textDoc == null) return;
-            var selection = doc.Selection as TextSelection;
-            if (selection == null) return;
-
-            EditPoint defPoint = textDoc.StartPoint.CreateEditPoint();
-            defPoint.MoveToAbsoluteOffset(charIndex + 1); // MoveToAbsoluteOffset is 1-based
-            selection.MoveToPoint(defPoint, false);
-            doc.Activate();
-        }
-
-        private void MenuItemCallback(object sender, EventArgs e)
+		private void MenuItemCallback(object sender, EventArgs e)
 		{
             ProtobufGoToPackage ProtoPackage = (ProtobufGoToPackage)this.package;
             var dte = ProtoPackage.m_dte;
@@ -97,26 +87,52 @@ namespace ProtobufGoTo
                 if (selection == null)
                     return;
 
+                // Always get the word under the cursor, regardless of selection
+                int originalLine = selection.ActivePoint.Line;
+                int originalColumn = selection.ActivePoint.DisplayColumn;
                 selection.WordLeft(true);
                 string leftWord = selection.Text;
                 selection.WordRight(true);
                 string word = leftWord + selection.Text;
-                selection.Cancel();
+                // Restore cursor
+                selection.MoveToLineAndOffset(originalLine, originalColumn);
                 string typeName = word.Trim();
 
                 if (string.IsNullOrWhiteSpace(typeName))
                     return;
 
+                // Search for 'message XXX' or 'enum XXX' in the document
                 var textDoc = doc.Object("TextDocument") as TextDocument;
-                string allText = (doc.Object("TextDocument") as TextDocument).StartPoint.CreateEditPoint().GetText((doc.Object("TextDocument") as TextDocument).EndPoint);
+                EditPoint startPoint = textDoc.StartPoint.CreateEditPoint();
+                string allText = startPoint.GetText(textDoc.EndPoint);
                 var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
                 var match = regex.Match(allText);
                 if (match.Success)
                 {
-                    GoToLocation(dte, doc.FullName, match.Index);
+                    int charIndex = match.Index;
+                    int line = 1;
+                    for (int i = 0; i < charIndex; i++)
+                    {
+                        if (allText[i] == '\n')
+                        {
+                            line++;
+                        }
+                    }
+                    // Find the column offset of the typename in the matched line by analyzing the line text
+                    EditPoint defPoint = textDoc.StartPoint.CreateEditPoint();
+                    defPoint.MoveToLineAndOffset(line + 1, 1);
+                    string lineText = defPoint.GetLines(line + 1, line + 2);
+                    int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
+                    if (columnOffset >= 0)
+                    {
+                        defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                    }
+                    selection.MoveToPoint(defPoint, false);
+                    doc.Activate();
                     return;
                 }
 
+                // If not found, search imported proto files
                 var importRegex = new Regex(@"^\s*import\s+""([^""]+)"";", RegexOptions.Multiline);
                 var importMatches = importRegex.Matches(allText);
                 string currentDir = Path.GetDirectoryName(doc.FullName);
@@ -130,16 +146,39 @@ namespace ProtobufGoTo
                     var importTypeMatch = regex.Match(importText);
                     if (importTypeMatch.Success)
                     {
-                        GoToLocation(dte, fullImportPath, importTypeMatch.Index);
+                        // Open the imported file in the editor
+                        Window importWin = dte.ItemOperations.OpenFile(fullImportPath);
+                        var importDoc = importWin.Document;
+                        var importTextDoc = importDoc.Object("TextDocument") as TextDocument;
+                        int charIndex = importTypeMatch.Index;
+                        int line = 1;
+                        for (int i = 0; i < charIndex; i++)
+                        {
+                            if (importText[i] == '\n')
+                            {
+                                line++;
+                            }
+                        }
+                        EditPoint defPoint = importTextDoc.StartPoint.CreateEditPoint();
+                        defPoint.MoveToLineAndOffset(line + 1, 1);
+                        string lineText = defPoint.GetLines(line + 1, line + 2);
+                        int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
+                        if (columnOffset >= 0)
+                        {
+                            defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                        }
+                        var importSelection = importDoc.Selection as TextSelection;
+                        importSelection.MoveToPoint(defPoint, false);
+                        importDoc.Activate();
                         return;
                     }
                 }
 
+                // If not found, search proto files from the solution
                 var solution = dte.Solution;
                 var protoFiles = new System.Collections.Generic.List<string>();
                 void FindProtoFiles(ProjectItems items)
                 {
-                    if (items == null) return;
                     foreach (ProjectItem item in items)
                     {
                         try
@@ -147,9 +186,10 @@ namespace ProtobufGoTo
                             if ((item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || item.Kind == EnvDTE.Constants.vsProjectItemKindMisc) &&
                                 item.Name.EndsWith(".proto", StringComparison.OrdinalIgnoreCase))
                             {
-                                protoFiles.Add(item.FileNames[1]);
+                                string filePath = item.FileNames[1];
+                                protoFiles.Add(filePath);
                             }
-                            if (item.ProjectItems != null)
+                            if (item.ProjectItems != null && item.ProjectItems.Count > 0)
                                 FindProtoFiles(item.ProjectItems);
                         }
                         catch { }
@@ -165,15 +205,37 @@ namespace ProtobufGoTo
                     catch { }
                 }
 
+                // 각 .proto 파일에서 message/enum 정의 찾기
+                var regex2 = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
                 foreach (var protoPath in protoFiles)
                 {
                     if (!File.Exists(protoPath))
                         continue;
                     string allText2 = File.ReadAllText(protoPath);
-                    var match2 = regex.Match(allText2);
+                    var match2 = regex2.Match(allText2);
                     if (match2.Success)
                     {
-                        GoToLocation(dte, protoPath, match2.Index);
+                        int charIndex2 = match2.Index;
+                        int line2 = 1;
+                        for (int i = 0; i < charIndex2; i++)
+                        {
+                            if (allText2[i] == '\n')
+                                line2++;
+                        }
+                        Window protoWin2 = dte.ItemOperations.OpenFile(protoPath);
+                        var protoDoc2 = protoWin2.Document;
+                        var protoTextDoc2 = protoDoc2.Object("TextDocument") as TextDocument;
+                        EditPoint defPoint2 = protoTextDoc2.StartPoint.CreateEditPoint();
+                        defPoint2.MoveToLineAndOffset(line2 + 1, 1);
+                        string lineText2 = defPoint2.GetLines(line2 + 1, line2 + 2);
+                        int columnOffset2 = lineText2.IndexOf(typeName, StringComparison.Ordinal);
+                        if (columnOffset2 >= 0)
+                        {
+                            defPoint2.MoveToLineAndOffset(line2 + 1, columnOffset2 + 1);
+                        }
+                        var protoSelection2 = protoDoc2.Selection as TextSelection;
+                        protoSelection2.MoveToPoint(defPoint2, false);
+                        protoDoc2.Activate();
                         return;
                     }
                 }
@@ -181,17 +243,17 @@ namespace ProtobufGoTo
             else if (doc.Name.EndsWith(".h", StringComparison.OrdinalIgnoreCase) ||
                 doc.Name.EndsWith(".cpp", StringComparison.OrdinalIgnoreCase))
             {
+                // 커서 위치의 단어 추출
                 TextSelection selection = doc.Selection as TextSelection;
                 if (selection == null)
                     return;
-
+                int originalLine = selection.ActivePoint.Line;
+                int originalColumn = selection.ActivePoint.DisplayColumn;
                 selection.WordLeft(true);
                 string leftWord = selection.Text;
                 selection.WordRight(true);
                 string word = leftWord + selection.Text;
-                selection.Cancel();
                 string typeName = word.Trim();
-
                 if (string.IsNullOrWhiteSpace(typeName))
                     return;
 
@@ -201,11 +263,11 @@ namespace ProtobufGoTo
                     typeName = typeName.Replace("PacketTypeReq_", "").Replace("PacketTypeRes_", "");
                 }
 
+                // 솔루션 내 모든 .proto 파일 탐색
                 var solution = dte.Solution;
                 var protoFiles = new System.Collections.Generic.List<string>();
                 void FindProtoFiles(ProjectItems items)
                 {
-                    if (items == null) return;
                     foreach (ProjectItem item in items)
                     {
                         try
@@ -213,9 +275,10 @@ namespace ProtobufGoTo
                             if ((item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || item.Kind == EnvDTE.Constants.vsProjectItemKindMisc) &&
                                 item.Name.EndsWith(".proto", StringComparison.OrdinalIgnoreCase))
                             {
-                                protoFiles.Add(item.FileNames[1]);
+                                string filePath = item.FileNames[1];
+                                protoFiles.Add(filePath);
                             }
-                            if (item.ProjectItems != null)
+                            if (item.ProjectItems != null && item.ProjectItems.Count > 0)
                                 FindProtoFiles(item.ProjectItems);
                         }
                         catch { }
@@ -231,6 +294,7 @@ namespace ProtobufGoTo
                     catch { }
                 }
 
+                // 각 .proto 파일에서 message/enum 정의 찾기
                 var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
                 foreach (var protoPath in protoFiles)
                 {
@@ -240,30 +304,28 @@ namespace ProtobufGoTo
                     var match = regex.Match(allText);
                     if (match.Success)
                     {
-                        GoToLocation(dte, protoPath, match.Index);
-                        return;
-                    }
-                }
-
-                var enumBlockRegex = new Regex(@"\benum\s+\w+\s*\{[\s\S]*?\}", RegexOptions.Multiline);
-                var valueRegex = new Regex(@"\b" + Regex.Escape(typeName) + @"\b");
-
-                foreach (var protoPath in protoFiles)
-                {
-                    if (!File.Exists(protoPath))
-                        continue;
-
-                    string allText = File.ReadAllText(protoPath);
-
-                    foreach (Match enumBlockMatch in enumBlockRegex.Matches(allText))
-                    {
-                        var valueMatch = valueRegex.Match(enumBlockMatch.Value);
-                        if (valueMatch.Success)
+                        int charIndex = match.Index;
+                        int line = 1;
+                        for (int i = 0; i < charIndex; i++)
                         {
-                            int charIndex = enumBlockMatch.Index + valueMatch.Index;
-                            GoToLocation(dte, protoPath, charIndex);
-                            return;
+                            if (allText[i] == '\n')
+                                line++;
                         }
+                        Window protoWin = dte.ItemOperations.OpenFile(protoPath);
+                        var protoDoc = protoWin.Document;
+                        var protoTextDoc = protoDoc.Object("TextDocument") as TextDocument;
+                        EditPoint defPoint = protoTextDoc.StartPoint.CreateEditPoint();
+                        defPoint.MoveToLineAndOffset(line + 1, 1);
+                        string lineText = defPoint.GetLines(line + 1, line + 2);
+                        int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
+                        if (columnOffset >= 0)
+                        {
+                            defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                        }
+                        var protoSelection = protoDoc.Selection as TextSelection;
+                        protoSelection.MoveToPoint(defPoint, false);
+                        protoDoc.Activate();
+                        return;
                     }
                 }
             }
