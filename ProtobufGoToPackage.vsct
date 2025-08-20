@@ -63,6 +63,22 @@
 	  		<ButtonText>Proto 정의로 이동</ButtonText>
 	  	</Strings>
 	  </Button>
+
+	  <Button guid="guidProtobufGoToPackageCmdSet" id="ProtobufGoToFuncId" priority="0x0100" type="Button">
+	  	<Parent guid="guidProtobufGoToPackageCmdSet" id="MyMenuGroup" />
+	  	<Icon guid="guidImages" id="bmpPic1" />
+	  	<Strings>
+	  		<ButtonText>Proto 함수로 이동</ButtonText>
+	  	</Strings>
+	  </Button>
+      
+	  <Button guid="guidProtobufGoToPackageCmdSet" id="ProtobufGoToFuncId" priority="0x0100" type="Button">
+	  	<Parent guid="guidProtobufGoToPackageCmdSet" id="ContextMenuGroup" />
+	  	<Icon guid="guidImages" id="bmpPic1" />
+	  	<Strings>
+	  		<ButtonText>Proto 함수로 이동</ButtonText>
+	  	</Strings>
+	  </Button>
     </Buttons>
 
     <!--The bitmaps section is used to define the bitmaps that are used for the commands.-->
@@ -89,6 +105,7 @@
       <IDSymbol name="MyMenuGroup" value="0x1020" />
 	  <IDSymbol name="ContextMenuGroup" value="0x1021" />
 	  <IDSymbol name="ProtobufGoToId" value="0x0100" />
+	  <IDSymbol name="ProtobufGoToFuncId" value="0x0101" />
     </GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{8bcbf9f0-c7c3-4a1e-89a0-fe5addf1b971}">

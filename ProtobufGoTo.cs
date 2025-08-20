@@ -20,6 +20,7 @@ namespace ProtobufGoTo
 	internal sealed class ProtobufGoTo
 	{
 		public const int CommandId = 0x0100;
+        public const int CommandFuncId = 0x0101;
 
         public static readonly Guid CommandSet = new Guid("7c132991-dea1-4719-8c67-c20b24b6775c");
 
@@ -40,6 +41,10 @@ namespace ProtobufGoTo
 				var menuCommandID = new CommandID(CommandSet, CommandId);
 				var menuItem = new MenuCommand(this.MenuItemCallback, menuCommandID);
 				commandService.AddCommand(menuItem);
+
+                menuCommandID = new CommandID(CommandSet, CommandFuncId);
+                menuItem = new MenuCommand(this.MenuItemFuncCallback, menuCommandID);
+                commandService.AddCommand(menuItem);
             }
 		}
 
@@ -67,6 +72,181 @@ namespace ProtobufGoTo
 		{
 			Instance = new ProtobufGoTo(package);
 		}
+
+        private static readonly string[] CppExtensions = { ".cpp" };
+
+        private bool IsCppFile(string fileName)
+        {
+            return CppExtensions.Any(ext => fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private List<string> FindAllCppFiles(DTE2 dte)
+        {
+            var cppFiles = new List<string>();
+            var solution = dte.Solution;
+
+            if (solution == null || string.IsNullOrEmpty(solution.FullName))
+                return cppFiles;
+
+            try
+            {
+                // Method 1: Use DTE ProjectItems (existing method)
+                FindCppFilesFromDTE(solution, cppFiles);
+
+                // Method 2: File system search as fallback
+                var solutionDir = Path.GetDirectoryName(solution.FullName + "//");
+                if (!string.IsNullOrEmpty(solutionDir))
+                {
+                    FindCppFilesFromFileSystem(solutionDir, cppFiles);
+                }
+
+                Debug.WriteLine($"Total C++ files found: {cppFiles.Count}");
+                foreach (var file in cppFiles)
+                {
+                    Debug.WriteLine($"C++ file: {file}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error finding C++ files: {ex.Message}");
+            }
+
+            return cppFiles.Distinct().ToList();
+        }
+
+        private void FindCppFilesFromDTE(Solution solution, List<string> cppFiles)
+        {
+            try
+            {
+                void FindCppFiles(ProjectItems items, int depth = 0)
+                {
+                    if (depth > 10) // Prevent infinite recursion
+                        return;
+
+                    if (items == null) return;
+
+                    try
+                    {
+                        Debug.WriteLine($"FindCppFiles - Depth: {depth}, Items count: {items.Count}");
+                        
+                        for (int i = 1; i <= items.Count; i++) // DTE collections are 1-based
+                        {
+                            try
+                            {
+                                var item = items.Item(i);
+                                if (item == null) continue;
+
+                                Debug.WriteLine($"Checking item: {item.Name}, Kind: {item.Kind}");
+
+                                if (IsCppFile(item.Name))
+                                {
+                                    try
+                                    {
+                                        if (item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || 
+                                            item.Kind == EnvDTE.Constants.vsProjectItemKindMisc)
+                                        {
+                                            if (item.FileCount > 0)
+                                            {
+                                                string filePath = item.FileNames[1]; // DTE is 1-based
+                                                if (!cppFiles.Contains(filePath))
+                                                {
+                                                    cppFiles.Add(filePath);
+                                                    Debug.WriteLine($"Added C++ file: {filePath}");
+                                                }
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Debug.WriteLine($"Error accessing file properties: {ex.Message}");
+                                    }
+                                }
+
+                                // Recursively search subdirectories
+                                if (item.ProjectItems != null && item.ProjectItems.Count > 0)
+                                {
+                                    FindCppFiles(item.ProjectItems, depth + 1);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"Error processing project item {i}: {ex.Message}");
+                                continue;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error iterating project items: {ex.Message}");
+                    }
+                }
+
+                foreach (Project proj in solution.Projects)
+                {
+                    try
+                    {
+                        if (proj == null) continue;
+                        
+                        Debug.WriteLine($"Processing project: {proj.Name} (Kind: {proj.Kind})");
+                        
+                        // Handle different project types
+                        if (proj.Kind == EnvDTE.Constants.vsProjectKindSolutionItems ||
+                            proj.Kind == EnvDTE.Constants.vsProjectKindMisc)
+                        {
+                            // Solution folders or misc items
+                            if (proj.ProjectItems != null)
+                                FindCppFiles(proj.ProjectItems);
+                        }
+                        else if (proj.ProjectItems != null)
+                        {
+                            // Regular projects
+                            FindCppFiles(proj.ProjectItems);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error processing project {proj?.Name}: {ex.Message}");
+                        continue;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in FindCppFilesFromDTE: {ex.Message}");
+            }
+        }
+
+        private void FindCppFilesFromFileSystem(string solutionDir, List<string> cppFiles)
+        {
+            try
+            {
+                Debug.WriteLine($"Searching C++ files in file system: {solutionDir}");
+                
+                var allCppFiles = new List<string>();
+                
+                // Search for each C++ extension
+                foreach (var extension in CppExtensions)
+                {
+                    var files = Directory.GetFiles(solutionDir, "*" + extension, SearchOption.AllDirectories);
+                    allCppFiles.AddRange(files);
+                }
+                
+                foreach (var file in allCppFiles)
+                {
+                    if (!cppFiles.Contains(file))
+                    {
+                        cppFiles.Add(file);
+                        Debug.WriteLine($"Added C++ file from filesystem: {file}");
+                    }
+                }
+                
+                Debug.WriteLine($"File system search found {allCppFiles.Count} C++ files");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in C++ file system search: {ex.Message}");
+            }
+        }
 
         private List<string> FindAllProtoFiles(DTE2 dte)
         {
@@ -229,7 +409,87 @@ namespace ProtobufGoTo
             }
         }
 
-		private void MenuItemCallback(object sender, EventArgs e)
+        private void MenuItemFuncCallback(object sender, EventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            ProtobufGoToPackage ProtoPackage = (ProtobufGoToPackage)this.package;
+            var dte = ProtoPackage.m_dte;
+            if (dte == null)
+            {
+                dte = ServiceProvider.GetService(typeof(DTE)) as DTE2;
+                if (dte == null)
+                    return;
+                ProtoPackage.m_dte = dte;
+            }
+            var doc = dte.ActiveDocument;
+            if (doc == null)
+                return;
+
+            TextSelection selection = doc.Selection as TextSelection;
+            if (selection == null)
+                return;
+
+            // Always get the word under the cursor, regardless of selection
+            int originalLine = selection.ActivePoint.Line;
+            int originalColumn = selection.ActivePoint.DisplayColumn;
+            selection.WordLeft(true);
+            string leftWord = selection.Text;
+            selection.WordRight(true);
+            string word = leftWord + selection.Text;
+            // Restore cursor
+            selection.MoveToLineAndOffset(originalLine, originalColumn);
+            string typeName = word.Trim();
+
+            if (string.IsNullOrWhiteSpace(typeName))
+                return;
+
+            if (typeName.StartsWith("PacketTypeReq_", StringComparison.OrdinalIgnoreCase) ||
+                typeName.StartsWith("PacketTypeRes_", StringComparison.OrdinalIgnoreCase))
+            {
+                typeName = typeName.Replace("PacketTypeReq_", "").Replace("PacketTypeRes_", "");
+            }
+
+            var cppFiles = FindAllCppFiles(dte);
+            var funcName = "ON_" + typeName;
+
+            var regex = new Regex(@"\s+" + Regex.Escape(funcName) + @"\s*\(", RegexOptions.Multiline);
+            foreach(var cppPath in cppFiles)
+            {
+                if (!File.Exists(cppPath))
+                    continue;
+                string allText = File.ReadAllText(cppPath);
+                var match = regex.Match(allText);
+                if (match.Success)
+                {
+                    int charIndex = match.Index;
+                    int line = 1;
+                    for (int i = 0; i < charIndex; i++)
+                    {
+                        if (allText[i] == '\n')
+                            line++;
+                    }
+                    Window protoWin = dte.ItemOperations.OpenFile(cppPath);
+                    var protoDoc = protoWin.Document;
+                    var protoTextDoc = protoDoc.Object("TextDocument") as TextDocument;
+                    EditPoint defPoint = protoTextDoc.StartPoint.CreateEditPoint();
+                    defPoint.MoveToLineAndOffset(line, 1);
+                    string lineText = defPoint.GetLines(line, line + 2);
+                    int columnOffset = lineText.IndexOf(funcName, StringComparison.Ordinal);
+                    if (columnOffset >= 0)
+                    {
+                        defPoint.MoveToLineAndOffset(line, columnOffset + 1);
+                    }
+                    var protoSelection = protoDoc.Selection as TextSelection;
+                    protoSelection.MoveToPoint(defPoint, false);
+                    protoDoc.Activate();
+                    return;
+                }
+            }
+        }
+
+
+        private void MenuItemCallback(object sender, EventArgs e)
 		{
             ThreadHelper.ThrowIfNotOnUIThread();
 
