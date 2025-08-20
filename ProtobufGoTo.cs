@@ -9,6 +9,8 @@ using EnvDTE;
 using EnvDTE80;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
+using System.Collections.Generic;
 
 namespace ProtobufGoTo
 {
@@ -66,8 +68,171 @@ namespace ProtobufGoTo
 			Instance = new ProtobufGoTo(package);
 		}
 
+        private List<string> FindAllProtoFiles(DTE2 dte)
+        {
+            var protoFiles = new List<string>();
+            var solution = dte.Solution;
+
+            if (solution == null || string.IsNullOrEmpty(solution.FullName))
+                return protoFiles;
+
+            try
+            {
+                // Method 1: Use DTE ProjectItems (existing method)
+                FindProtoFilesFromDTE(solution, protoFiles);
+
+                // Method 2: File system search as fallback
+                var solutionDir = Path.GetDirectoryName(solution.FullName + "//");
+                if (!string.IsNullOrEmpty(solutionDir))
+                {
+                    FindProtoFilesFromFileSystem(solutionDir, protoFiles);
+                }
+
+                Debug.WriteLine($"Total proto files found: {protoFiles.Count}");
+                foreach (var file in protoFiles)
+                {
+                    Debug.WriteLine($"Proto file: {file}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error finding proto files: {ex.Message}");
+            }
+
+            return protoFiles.Distinct().ToList();
+        }
+
+        private void FindProtoFilesFromDTE(Solution solution, List<string> protoFiles)
+        {
+            try
+            {
+                void FindProtoFiles(ProjectItems items, int depth = 0)
+                {
+                    if (depth > 10) // Prevent infinite recursion
+                        return;
+
+                    if (items == null) return;
+
+                    try
+                    {
+                        Debug.WriteLine($"FindProtoFiles - Depth: {depth}, Items count: {items.Count}");
+                        
+                        for (int i = 1; i <= items.Count; i++) // DTE collections are 1-based
+                        {
+                            try
+                            {
+                                var item = items.Item(i);
+                                if (item == null) continue;
+
+                                Debug.WriteLine($"Checking item: {item.Name}, Kind: {item.Kind}");
+
+                                if (item.Name.EndsWith(".proto", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    try
+                                    {
+                                        if (item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || 
+                                            item.Kind == EnvDTE.Constants.vsProjectItemKindMisc)
+                                        {
+                                            if (item.FileCount > 0)
+                                            {
+                                                string filePath = item.FileNames[1]; // DTE is 1-based
+                                                if (!protoFiles.Contains(filePath))
+                                                {
+                                                    protoFiles.Add(filePath);
+                                                    Debug.WriteLine($"Added proto file: {filePath}");
+                                                }
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Debug.WriteLine($"Error accessing file properties: {ex.Message}");
+                                    }
+                                }
+
+                                // Recursively search subdirectories
+                                if (item.ProjectItems != null && item.ProjectItems.Count > 0)
+                                {
+                                    FindProtoFiles(item.ProjectItems, depth + 1);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"Error processing project item {i}: {ex.Message}");
+                                continue;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error iterating project items: {ex.Message}");
+                    }
+                }
+
+                foreach (Project proj in solution.Projects)
+                {
+                    try
+                    {
+                        if (proj == null) continue;
+                        
+                        Debug.WriteLine($"Processing project: {proj.Name} (Kind: {proj.Kind})");
+                        
+                        // Handle different project types
+                        if (proj.Kind == EnvDTE.Constants.vsProjectKindSolutionItems ||
+                            proj.Kind == EnvDTE.Constants.vsProjectKindMisc)
+                        {
+                            // Solution folders or misc items
+                            if (proj.ProjectItems != null)
+                                FindProtoFiles(proj.ProjectItems);
+                        }
+                        else if (proj.ProjectItems != null)
+                        {
+                            // Regular projects
+                            FindProtoFiles(proj.ProjectItems);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error processing project {proj?.Name}: {ex.Message}");
+                        continue;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in FindProtoFilesFromDTE: {ex.Message}");
+            }
+        }
+
+        private void FindProtoFilesFromFileSystem(string solutionDir, List<string> protoFiles)
+        {
+            try
+            {
+                Debug.WriteLine($"Searching file system in: {solutionDir}");
+                
+                var allProtoFiles = Directory.GetFiles(solutionDir, "*.proto", SearchOption.AllDirectories);
+                
+                foreach (var file in allProtoFiles)
+                {
+                    if (!protoFiles.Contains(file))
+                    {
+                        protoFiles.Add(file);
+                        Debug.WriteLine($"Added proto file from filesystem: {file}");
+                    }
+                }
+                
+                Debug.WriteLine($"File system search found {allProtoFiles.Length} proto files");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in file system search: {ex.Message}");
+            }
+        }
+
 		private void MenuItemCallback(object sender, EventArgs e)
 		{
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             ProtobufGoToPackage ProtoPackage = (ProtobufGoToPackage)this.package;
             var dte = ProtoPackage.m_dte;
             if (dte == null)
@@ -174,36 +339,8 @@ namespace ProtobufGoTo
                     }
                 }
 
-                // If not found, search proto files from the solution
-                var solution = dte.Solution;
-                var protoFiles = new System.Collections.Generic.List<string>();
-                void FindProtoFiles(ProjectItems items)
-                {
-                    foreach (ProjectItem item in items)
-                    {
-                        try
-                        {
-                            if ((item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || item.Kind == EnvDTE.Constants.vsProjectItemKindMisc) &&
-                                item.Name.EndsWith(".proto", StringComparison.OrdinalIgnoreCase))
-                            {
-                                string filePath = item.FileNames[1];
-                                protoFiles.Add(filePath);
-                            }
-                            if (item.ProjectItems != null && item.ProjectItems.Count > 0)
-                                FindProtoFiles(item.ProjectItems);
-                        }
-                        catch { }
-                    }
-                }
-                foreach (Project proj in solution.Projects)
-                {
-                    try
-                    {
-                        if (proj.ProjectItems != null)
-                            FindProtoFiles(proj.ProjectItems);
-                    }
-                    catch { }
-                }
+                // If not found, search proto files from the solution using improved method
+                var protoFiles = FindAllProtoFiles(dte);
 
                 // 각 .proto 파일에서 message/enum 정의 찾기
                 var regex2 = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
@@ -263,36 +400,8 @@ namespace ProtobufGoTo
                     typeName = typeName.Replace("PacketTypeReq_", "").Replace("PacketTypeRes_", "");
                 }
 
-                // 솔루션 내 모든 .proto 파일 탐색
-                var solution = dte.Solution;
-                var protoFiles = new System.Collections.Generic.List<string>();
-                void FindProtoFiles(ProjectItems items)
-                {
-                    foreach (ProjectItem item in items)
-                    {
-                        try
-                        {
-                            if ((item.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile || item.Kind == EnvDTE.Constants.vsProjectItemKindMisc) &&
-                                item.Name.EndsWith(".proto", StringComparison.OrdinalIgnoreCase))
-                            {
-                                string filePath = item.FileNames[1];
-                                protoFiles.Add(filePath);
-                            }
-                            if (item.ProjectItems != null && item.ProjectItems.Count > 0)
-                                FindProtoFiles(item.ProjectItems);
-                        }
-                        catch { }
-                    }
-                }
-                foreach (Project proj in solution.Projects)
-                {
-                    try
-                    {
-                        if (proj.ProjectItems != null)
-                            FindProtoFiles(proj.ProjectItems);
-                    }
-                    catch { }
-                }
+                // 솔루션 내 모든 .proto 파일 탐색 - 개선된 방법 사용
+                var protoFiles = FindAllProtoFiles(dte);
 
                 // 각 .proto 파일에서 message/enum 정의 찾기
                 var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
@@ -326,6 +435,46 @@ namespace ProtobufGoTo
                         protoSelection.MoveToPoint(defPoint, false);
                         protoDoc.Activate();
                         return;
+                    }
+                }
+
+                // 각 .proto 파일에서 enum 값 찾기
+                var enumBlockRegex = new Regex(@"\benum\s+\w+\s*\{[\s\S]*?\}", RegexOptions.Multiline);
+                var valueRegex = new Regex(@"\b" + Regex.Escape(typeName) + @"\b");
+                foreach (var protoPath in protoFiles)
+                {
+                    if (!File.Exists(protoPath))
+                        continue;
+
+                    string allText = File.ReadAllText(protoPath);
+                    foreach (Match enumBlockMatch in enumBlockRegex.Matches(allText))
+                    {
+                        var valueMatch = valueRegex.Match(enumBlockMatch.Value);
+                        if (valueMatch.Success)
+                        {
+                            int charIndex = enumBlockMatch.Index + valueMatch.Index;
+                            int line = 1;
+                            for (int i = 0; i < charIndex; i++)
+                            {
+                                if (allText[i] == '\n')
+                                    line++;
+                            }
+                            Window protoWin = dte.ItemOperations.OpenFile(protoPath);
+                            var protoDoc = protoWin.Document;
+                            var protoTextDoc = protoDoc.Object("TextDocument") as TextDocument;
+                            EditPoint defPoint = protoTextDoc.StartPoint.CreateEditPoint();
+                            defPoint.MoveToLineAndOffset(line, 1);
+                            string lineText = defPoint.GetLines(line, line + 2);
+                            int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
+                            if (columnOffset >= 0)
+                            {
+                                defPoint.MoveToLineAndOffset(line, columnOffset + 1);
+                            }
+                            var protoSelection = protoDoc.Selection as TextSelection;
+                            protoSelection.MoveToPoint(defPoint, false);
+                            protoDoc.Activate();
+                            return;
+                        }
                     }
                 }
             }
