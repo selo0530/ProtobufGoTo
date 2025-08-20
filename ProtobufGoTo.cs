@@ -270,7 +270,7 @@ namespace ProtobufGoTo
                 var textDoc = doc.Object("TextDocument") as TextDocument;
                 EditPoint startPoint = textDoc.StartPoint.CreateEditPoint();
                 string allText = startPoint.GetText(textDoc.EndPoint);
-                var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
+                var regex = new Regex(@"(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
                 var match = regex.Match(allText);
                 if (match.Success)
                 {
@@ -285,12 +285,12 @@ namespace ProtobufGoTo
                     }
                     // Find the column offset of the typename in the matched line by analyzing the line text
                     EditPoint defPoint = textDoc.StartPoint.CreateEditPoint();
-                    defPoint.MoveToLineAndOffset(line + 1, 1);
-                    string lineText = defPoint.GetLines(line + 1, line + 2);
+                    defPoint.MoveToLineAndOffset(line, 1);
+                    string lineText = defPoint.GetLines(line, line + 2);
                     int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
                     if (columnOffset >= 0)
                     {
-                        defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                        defPoint.MoveToLineAndOffset(line, columnOffset + 1);
                     }
                     selection.MoveToPoint(defPoint, false);
                     doc.Activate();
@@ -325,12 +325,12 @@ namespace ProtobufGoTo
                             }
                         }
                         EditPoint defPoint = importTextDoc.StartPoint.CreateEditPoint();
-                        defPoint.MoveToLineAndOffset(line + 1, 1);
-                        string lineText = defPoint.GetLines(line + 1, line + 2);
+                        defPoint.MoveToLineAndOffset(line, 1);
+                        string lineText = defPoint.GetLines(line, line + 2);
                         int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
                         if (columnOffset >= 0)
                         {
-                            defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                            defPoint.MoveToLineAndOffset(line, columnOffset + 1);
                         }
                         var importSelection = importDoc.Selection as TextSelection;
                         importSelection.MoveToPoint(defPoint, false);
@@ -343,7 +343,7 @@ namespace ProtobufGoTo
                 var protoFiles = FindAllProtoFiles(dte);
 
                 // 각 .proto 파일에서 message/enum 정의 찾기
-                var regex2 = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
+                var regex2 = new Regex(@"(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
                 foreach (var protoPath in protoFiles)
                 {
                     if (!File.Exists(protoPath))
@@ -363,12 +363,12 @@ namespace ProtobufGoTo
                         var protoDoc2 = protoWin2.Document;
                         var protoTextDoc2 = protoDoc2.Object("TextDocument") as TextDocument;
                         EditPoint defPoint2 = protoTextDoc2.StartPoint.CreateEditPoint();
-                        defPoint2.MoveToLineAndOffset(line2 + 1, 1);
-                        string lineText2 = defPoint2.GetLines(line2 + 1, line2 + 2);
+                        defPoint2.MoveToLineAndOffset(line2, 1);
+                        string lineText2 = defPoint2.GetLines(line2, line2 + 2);
                         int columnOffset2 = lineText2.IndexOf(typeName, StringComparison.Ordinal);
                         if (columnOffset2 >= 0)
                         {
-                            defPoint2.MoveToLineAndOffset(line2 + 1, columnOffset2 + 1);
+                            defPoint2.MoveToLineAndOffset(line2, columnOffset2 + 1);
                         }
                         var protoSelection2 = protoDoc2.Selection as TextSelection;
                         protoSelection2.MoveToPoint(defPoint2, false);
@@ -390,6 +390,8 @@ namespace ProtobufGoTo
                 string leftWord = selection.Text;
                 selection.WordRight(true);
                 string word = leftWord + selection.Text;
+                // Restore cursor
+                selection.MoveToLineAndOffset(originalLine, originalColumn);
                 string typeName = word.Trim();
                 if (string.IsNullOrWhiteSpace(typeName))
                     return;
@@ -404,7 +406,8 @@ namespace ProtobufGoTo
                 var protoFiles = FindAllProtoFiles(dte);
 
                 // 각 .proto 파일에서 message/enum 정의 찾기
-                var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
+                //var regex = new Regex(@"^\s*(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
+                var regex = new Regex(@"(message|enum)\s+" + Regex.Escape(typeName) + @"\b", RegexOptions.Multiline);
                 foreach (var protoPath in protoFiles)
                 {
                     if (!File.Exists(protoPath))
@@ -424,12 +427,12 @@ namespace ProtobufGoTo
                         var protoDoc = protoWin.Document;
                         var protoTextDoc = protoDoc.Object("TextDocument") as TextDocument;
                         EditPoint defPoint = protoTextDoc.StartPoint.CreateEditPoint();
-                        defPoint.MoveToLineAndOffset(line + 1, 1);
-                        string lineText = defPoint.GetLines(line + 1, line + 2);
+                        defPoint.MoveToLineAndOffset(line, 1);
+                        string lineText = defPoint.GetLines(line, line + 2);
                         int columnOffset = lineText.IndexOf(typeName, StringComparison.Ordinal);
                         if (columnOffset >= 0)
                         {
-                            defPoint.MoveToLineAndOffset(line + 1, columnOffset + 1);
+                            defPoint.MoveToLineAndOffset(line, columnOffset + 1);
                         }
                         var protoSelection = protoDoc.Selection as TextSelection;
                         protoSelection.MoveToPoint(defPoint, false);

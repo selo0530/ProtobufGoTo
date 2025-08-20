@@ -52,7 +52,7 @@
         <Parent guid="guidProtobufGoToPackageCmdSet" id="MyMenuGroup" />
         <Icon guid="guidImages" id="bmpPic1" />
         <Strings>
-          <ButtonText>Protobuf Go to Definition</ButtonText>
+          <ButtonText>Proto 정의로 이동</ButtonText>
         </Strings>
       </Button>
 
@@ -60,7 +60,7 @@
 	  	<Parent guid="guidProtobufGoToPackageCmdSet" id="ContextMenuGroup" />
 	  	<Icon guid="guidImages" id="bmpPic1" />
 	  	<Strings>
-	  		<ButtonText>Protobuf Go to Definition</ButtonText>
+	  		<ButtonText>Proto 정의로 이동</ButtonText>
 	  	</Strings>
 	  </Button>
     </Buttons>
